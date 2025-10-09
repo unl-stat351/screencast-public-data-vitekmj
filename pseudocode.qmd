@@ -4,3 +4,12 @@ title: Screencast Pseudocode
 output: html
 ---
 
+1. scrape the api by random interval 1-2 seconds for all currently certified TDs
+
+http://www.uschess.org/datapage/gamestats.php?memid=12681247&ptype=Y&rs=R&dkey=2019&drill=Y
+
+2. store the memIDs in a dataframe
+3. utilizing a 1-2 second random delay scrape the secondary dataset for ratings and populate a dataframe of the 3 time controls (blitz quick regular)
+4. make a table of average rating by state and make a map 
+5. make a barchart of average time control and compare them
+6. display average percentile by state 

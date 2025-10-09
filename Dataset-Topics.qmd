@@ -14,7 +14,7 @@ Things you plan to investigate using this dataset:
 
 - TD Ratings by catergory
 - TDs by state
-- TD Timecontrol rating trends
+- TD Timecontrol rating trends/percentiles by state
 
 Stat 351 topics you plan to cover during the analysis:
 
