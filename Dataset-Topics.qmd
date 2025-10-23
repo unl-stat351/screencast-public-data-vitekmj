@@ -7,8 +7,7 @@ output: html
 Dataset: https://www.uschess.org/msa/MbrDtlMain.php?32195474
 Dataset 2: https://new.uschess.org/safesport-certified-tds
 
-Source: https://www.chess.com/blog/RobKing/us-chess-analytics-part-1-data-collection
-[Link to dataset]()
+Reference Material: https://www.chess.com/blog/RobKing/us-chess-analytics-part-1-data-collection
 
 Things you plan to investigate using this dataset:
 
@@ -24,5 +23,5 @@ Stat 351 topics you plan to cover during the analysis:
 4. Good use of graphics
 
 
-I hope to be able to get the 3 time control ratings for players who are also TDs and then anaylze based on state and games played how they compare to other people and states based on percentiles.
+I hope to be able to get the 3 time control ratings for players who are also TDs and then analyze based on state and games played how they compare to other people and states based on percentiles.
 
