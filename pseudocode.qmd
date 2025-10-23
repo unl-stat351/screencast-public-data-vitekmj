@@ -13,3 +13,5 @@ http://www.uschess.org/datapage/gamestats.php?memid=12681247&ptype=Y&rs=R&dkey=2
 4. make a table of average rating by state and make a map 
 5. make a barchart of average time control and compare them
 6. display average percentile by state 
+
+The main diffculutly will be restricting the scraping to only get applicable information as well as implementing best practices with random offsets.
