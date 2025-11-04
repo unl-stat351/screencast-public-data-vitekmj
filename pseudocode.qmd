@@ -1,9 +1,8 @@
 ---
-author: Your Name
+author: Max Vitek
 title: Screencast Pseudocode
 output: html
 ---
-
 1. scrape the api by random interval 1-2 seconds for all currently certified TDs
 
 http://www.uschess.org/datapage/gamestats.php?memid=12681247&ptype=Y&rs=R&dkey=2019&drill=Y
@@ -15,3 +14,137 @@ http://www.uschess.org/datapage/gamestats.php?memid=12681247&ptype=Y&rs=R&dkey=2
 6. display average percentile by state 
 
 The main diffculutly will be restricting the scraping to only get applicable information as well as implementing best practices with random offsets.
+------
+
+This is somewhat formalized as sql in order to try getting functions in more plain language
+
+-------------------------------------
+Load libraries for web scraping, data manipulation, and visualization
+
+implemenbt sleep function which    Wait 1-2 seconds randomly
+    // This prevents overwhelming the USCF website
+
+FUNCTION scrape_td_list():
+    Go to certified TDs webpage
+    Wait (ethical delay)
+    
+    Find all links with member IDs
+    Extract the 8-digit ID numbers
+    Remove duplicates
+    
+    Store IDs in a dataframe
+    Return list of TD member IDs
+
+FUNCTION scrape_td_ratings(member_id):
+    Build URL using member_id
+    Wait with ethical delay
+    Func:
+        Get the webpage
+        Read all text from page
+        
+        Search and extract:
+            - State (2 letters like "CA", "NY")
+            - Regular rating and percentile
+            - Quick rating and percentile  
+            - Blitz rating and percentile
+        Return all data as one row on memid
+
+
+FUNCTION scrape_all_tds(td_list):
+    Create empty results list
+    
+    FOR EACH member_id in td_list:
+        Get ratings for this TD
+        Add to results list
+        
+        Every 50 TDs, print progress update
+    
+    Combine all results into one dataframe
+    Save to df file
+    
+    Return complete dataframe
+
+Remove rows with no rating data at all
+Convert rating columns to numbers
+Show summary statistics (min, max, average)
+
+
+Group data by state
+
+FOR all state equilivents: (California is split)
+    Calculate average Regular rating
+    Calculate average Quick rating
+    Calculate average Blitz rating
+    Calculate average percentiles for each
+    Count how many TDs in this state
+
+Save as state_averages dataframe
+
+
+Get US state boundary data
+Join with our state_averages data
+
+Create colored map where:
+    Red = lower average rating
+    Yellow = medium average rating
+    Green = higher average rating
+Save as image file
+
+Calculate overall averages:
+    - Average Regular rating
+    - Average Quick rating
+    - Average Blitz rating
+
+Create bar chart with 3 bars (one per time control)
+Color bars differently (blue, green, red)
+Label each bar with the rating value
+Save as image file
+
+Take top 20 states by Regular percentile
+Reshape data so each state has 3 rows:
+    - Regular percentile
+    - Quick percentile
+    - Blitz percentile
+
+Create grouped bar chart (3 bars per state)
+Make horizontal bars (easier to read state names)
+Save as image file
+
+
+Take top 20 states by number of TDs
+
+Create horizontal bar chart showing TD count per state
+Sort from most TDs to least
+Save picture/graph
+
+
+GET SUMMARY REPORT
+    - Total number of TDs analyzed
+    - Number of states represented
+    - Average ratings (Regular, Quick, Blitz)
+    - Average percentiles (Regular, Quick, Blitz)
+    - Top 5 states by rating
+
+Save complete TD data to df
+Save state averages to df
+
+──────────────────────
+1. Setup libraries
+2. Get list of all TDs → td_list
+3. Scrape ratings for all TDs → ratings_data
+4. Clean the data → clean_data
+5. Calculate state averages → state_data
+6. Create US map
+7. Create time control comparison
+8. Create percentile comparison
+9. Create TD count chart
+10. Print summary report
+11. Save all results
+
+Why each step matter
+Random delay: Be nice to USCF's website, don't overload their servers
+Scraping: Get data from website HTML into usable format
+Cleaning: Remove bad/missing data so calculations work correctly
+Aggragating: Summarize individual TD data into state-level statistics
+Visualizing: Make maps and charts so patterns are easy to see
+Storage: Keep data and images for future reference
