@@ -41,3 +41,294 @@ There will be three deliverables for this project:
 
 In lieu of a midterm exam, you will peer review a selection of your classmates' screencasts. 
 
+
+1. Webscraping 
+2. Ethical API usage
+3. EDA/LIST PROCESSING
+4. Good use of graphics
+
+As I start this the USCF is migrating the site to https://ratings.uschess.org/player/16088033
+```{r}
+# 1 Setup: Libraries, URLs, and Paths
+library(rvest)
+library(httr)
+library(tidyverse)
+library(purrr)
+library(tigris)
+library(maps)
+library(viridisLite)
+
+# Base URLs
+SAFE_BASE <- "https://new.uschess.org/safesport-certified-tds?page="
+MSA_BASE <- "https://www.uschess.org/msa/MbrDtlMain.php?"
+
+# Cache files
+td_cache_file <- "td_list_all.csv"
+ratings_cache_file <- "td_ratings_all.csv"
+
+# Ethical delay (1–2 seconds random)
+ethical_delay <- function() Sys.sleep(runif(1, 1, 2))
+```
+
+```{r}
+# 2 Helper: Scrape one SafeSport TD page
+scrape_td_page <- function(page_num = 0) {
+  url <- paste0(SAFE_BASE, page_num)
+  message("Fetching SafeSport page ", page_num, ": ", url)
+  
+  page <- try(read_html(url), silent = TRUE)
+  if (inherits(page, "try-error")) {
+    message("Failed to load page ", page_num)
+    return(NULL)
+  }
+  
+  tbl <- page |>
+    html_element("table") |>
+    html_table(fill = TRUE)
+  
+  if (is.null(tbl) || nrow(tbl) == 0) return(NULL)
+  
+  names(tbl) <- c("Name", "MemberID", "Expiration", "State", "ActivityType")
+  
+  tbl |>
+    filter(str_detect(MemberID, "^[0-9]+$")) |>
+    mutate(MemberID = as.character(MemberID))
+}
+
+
+# 3 Scrape all SafeSport TD page
+if (!file.exists(td_cache_file)) {
+  all_tds <- list()
+  
+  for (i in 0:30) { # go through pages until blank
+    ethical_delay()
+    page_data <- scrape_td_page(i)
+    if (is.null(page_data) || nrow(page_data) == 0) break
+    all_tds[[length(all_tds) + 1]] <- page_data
+  }
+  
+  td_table <- bind_rows(all_tds)
+  write_csv(td_table, td_cache_file)
+  message("Saved SafeSport TD list (", nrow(td_table), " rows).")
+} else {
+  td_table <- read_csv(td_cache_file, show_col_types = FALSE)
+  message("Loaded cached TD list (", nrow(td_table), " rows).")
+}
+
+# 4 Helper: Scrape MSA rating details for each TD
+parse_td_profile <- function(memid) {
+  ethical_delay()
+  url <- paste0(MSA_BASE, memid)
+  
+  message("Scraping MSA profile: ", url)
+  
+  page <- try(read_html(url), silent = TRUE)
+  if (inherits(page, "try-error")) {
+    message("Error reading ", memid)
+    return(tibble(MemberID = memid, State = NA, Regular = NA, Quick = NA, Blitz = NA))
+  }
+  
+  text <- html_text(page)
+  
+  # Extract State (2-letter code near "State:")
+  state <- str_match(text, "(?i)State[:\\s]+([A-Z]{2})")[,2]
+  
+  # Extract Ratings (more robust regex)
+  reg <- str_match(text, "(?i)Regular[\\s\\n]*Rating[:\\s]*([0-9]{3,4})")[,2]
+  quick <- str_match(text, "(?i)Quick[\\s\\n]*Rating[:\\s]*([0-9]{3,4})")[,2]
+  blitz <- str_match(text, "(?i)Blitz[\\s\\n]*Rating[:\\s]*([0-9]{3,4})")[,2]
+  
+  tibble(
+    MemberID = memid,
+    State = state,
+    Regular = as.numeric(reg),
+    Quick = as.numeric(quick),
+    Blitz = as.numeric(blitz)
+  )
+}
+
+# 5 Scrape all MSA profiles with caching
+if (!file.exists(ratings_cache_file)) {
+  message("Scraping all TD rating profiles...")
+  ratings_data <- map_dfr(td_table$MemberID, parse_td_profile)
+  write_csv(ratings_data, ratings_cache_file)
+  message("Ratings data saved (", nrow(ratings_data), " rows).")
+} else {
+  existing <- read_csv(ratings_cache_file, show_col_types = FALSE)
+  to_scrape <- setdiff(td_table$MemberID, existing$MemberID)
+  
+  if (length(to_scrape) > 0) {
+    message("Updating ratings for new TDs (", length(to_scrape), " new)...")
+    new_data <- map_dfr(to_scrape, parse_td_profile)
+    ratings_data <- bind_rows(existing, new_data)
+    write_csv(ratings_data, ratings_cache_file)
+  } else {
+    ratings_data <- existing
+    message("Ratings cache up to date (", nrow(ratings_data), " total).")
+  }
+}
+
+# 6 Merge SafeSport + MSA data
+td_data <- left_join(td_table, ratings_data, by = "MemberID") |>
+  filter(!is.na(Regular) | !is.na(Quick) | !is.na(Blitz))
+```
+
+```{r}
+td_data <- td_data %>%
+  select(Name, MemberID, State = State.x, Regular, Quick, Blitz)
+```
+
+```{r}
+# Drop rows missing all ratings or with unrealistic values
+td_data <- td_data %>%
+  filter(!(is.na(Regular) & is.na(Quick) & is.na(Blitz))) %>%
+  mutate(across(c(Regular, Quick, Blitz),
+                ~ ifelse(. < 100 | . > 3000, NA, .)))
+
+td_data <- td_data |>
+  distinct(MemberID, .keep_all = TRUE)
+
+# ==========================================
+# 7 Compute State Averages
+# ==========================================
+state_avg <- td_data %>%
+  group_by(State) %>%
+  summarise(
+    Regular = mean(Regular, na.rm = TRUE),
+    Quick = mean(Quick, na.rm = TRUE),
+    Blitz = mean(Blitz, na.rm = TRUE),
+    Count = n()
+  ) %>%
+  filter(!is.na(State) & State %in% state.abb)
+
+# ==========================================
+# 8 Visualizations
+# ==========================================
+us_states <- map_data("state")
+state_names <- data.frame(State = state.abb, region = tolower(state.name))
+
+merged <- left_join(state_avg, state_names, by = "State") %>%
+  left_join(us_states, by = "region")
+
+# (a) U.S. Map of Average Regular Rating
+p_map <- ggplot(merged, aes(long, lat, group = group, fill = Regular, alpha = sqrt(Count))) +
+  geom_polygon(color = "grey40", size = 0.2) +
+  scale_fill_viridis_c(option = "plasma", direction = -1, na.value = "grey90") +
+  scale_alpha_continuous(range = c(0.5, 1)) +
+  coord_fixed(1.3) +
+  theme_void() +
+  labs(
+    title = "Average Regular TD Rating by State (SafeSport-Certified TDs)",
+    subtitle = "Opacity reflects number of certified TDs per state",
+    fill = "Avg Rating",
+    alpha = "TD Count (sqrt-scaled)",
+    caption = paste("Data scraped:", Sys.Date())
+  )
+
+ggsave("us_td_rating_map.png", plot = p_map, width = 10, height = 6)
+
+p_map
+```
+
+```{r}
+# (b) Bar Chart: Time Control Comparison
+avg_ratings <- colMeans(state_avg[, c("Regular", "Quick", "Blitz")], na.rm = TRUE)
+df_avg <- tibble(TimeControl = names(avg_ratings), Rating = avg_ratings)
+
+p_bar <- ggplot(df_avg, aes(reorder(TimeControl, Rating), Rating, fill = TimeControl)) +
+  geom_col(width = 0.6, show.legend = FALSE) +
+  geom_text(aes(label = round(Rating, 1)), vjust = -0.5, fontface = "bold") +
+  scale_fill_viridis_d(option = "turbo") +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Average Ratings by Time Control",
+    x = NULL, y = "Average Rating"
+  ) +
+  ylim(0, max(df_avg$Rating) * 1.1)
+
+p_bar
+```
+
+```{r}
+# (c) TD Count per State
+top_states <- state_avg %>%
+  arrange(desc(Count)) %>%
+  slice_head(n = 20)
+
+p_count <- ggplot(top_states, aes(x = reorder(State, Count), y = Count)) +
+  geom_col(fill = viridis(20)[10]) +
+  geom_text(aes(label = Count), hjust = -0.1, size = 3.5) +
+  coord_flip() +
+  theme_minimal(base_size = 12) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(
+    title = "Top 20 States by Number of Certified TDs",
+    x = "State", y = "TD Count"
+  )
+p_count
+ggsave("td_count_by_state.png", plot = p_count, width = 7, height = 6)
+```
+```{r}
+top_by_state <- function(state_abbrev, data = td_data) {
+  
+  # Basic validation
+  if (!state_abbrev %in% unique(data$State)) {
+    stop("State abbreviation not found in dataset: ", state_abbrev)
+  }
+  
+  # Filter, sort, take top 10
+  top10 <- data |>
+    filter(State == state_abbrev) |>
+    arrange(desc(Regular)) |>
+    slice_head(n = 10)
+  
+  return(top10)
+}
+
+top_by_state("CT")
+```
+```{r}
+top10_nationwide <- td_data |>
+  filter(!is.na(Regular)) |>
+  arrange(desc(Regular)) |>
+  slice_head(n = 10)
+
+top10_nationwide
+```
+
+```{r}
+# 9 Summary Report
+cat("Total unique TDs analyzed: ", nrow(td_data), "\n")
+cat("States represented:        ", n_distinct(td_data$State), "\n")
+
+overall_stats <- td_data %>%
+  summarise(
+    Avg_Regular = mean(Regular, na.rm = TRUE),
+    Med_Regular = median(Regular, na.rm = TRUE),
+    SD_Regular = sd(Regular, na.rm = TRUE),
+    Avg_Quick = mean(Quick, na.rm = TRUE),
+    Med_Quick = median(Quick, na.rm = TRUE),
+    SD_Quick = sd(Quick, na.rm = TRUE),
+    Avg_Blitz = mean(Blitz, na.rm = TRUE),
+    Med_Blitz = median(Blitz, na.rm = TRUE),
+    SD_Blitz = sd(Blitz, na.rm = TRUE)
+  )
+
+print(overall_stats)
+```
+
+```{r}
+top5 <- state_avg %>% arrange(desc(Regular)) %>% slice_head(n = 5)
+print(top5)
+```
+
+```{r}
+bottom5 <- state_avg %>% arrange(Regular) %>% slice_head(n = 5)
+print(bottom5)
+```
+
+```{r}
+largest <- state_avg %>% arrange(desc(Count)) %>% slice_head(n = 5)
+print(largest)
+```
+
