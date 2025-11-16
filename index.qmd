@@ -1,5 +1,5 @@
 ---
-author: Your Name
+author: Max Vitek
 title: 'Project: Scraping Public Data Screencast'
 output: html
 ---
